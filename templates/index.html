@@ -1,0 +1,1742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DayView — Screenpipe Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #0F1B2D;
+      --card:         #1B2A4A;
+      --border:       #2A3F66;
+      --text:         #E8ECF1;
+      --text-muted:   #A0B4C8;
+      --accent:       #4A9EFF;
+      --accent-hover: #6AB4FF;
+      --success:      #4ADE80;
+      --warning:      #FBBF24;
+      --error:        #F87171;
+      --radius-card:  8px;
+      --radius-btn:   6px;
+      --pad-card:     24px;
+      --font:         'Inter', system-ui, sans-serif;
+      --font-mono:    'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    html { font-size: 16px; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      line-height: 1.6;
+      min-height: 100vh;
+      padding: 0 16px 64px;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .page {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    /* ── Card ─────────────────────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: var(--pad-card);
+      margin-bottom: 20px;
+    }
+
+    .card-heading {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    /* ── Buttons ──────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: var(--radius-btn);
+      border: none;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s, opacity 0.15s;
+    }
+
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) {
+      background: rgba(74, 158, 255, 0.08);
+      border-color: var(--accent);
+    }
+
+    .btn-nav {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      font-size: 16px;
+    }
+    .btn-nav:hover:not(:disabled) {
+      color: var(--text);
+      border-color: var(--accent);
+      background: rgba(74, 158, 255, 0.06);
+    }
+    .btn-nav:disabled { opacity: 0.25; }
+
+    /* ── Date Navigation Bar ──────────────────────────────────── */
+    .date-nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+      margin-bottom: 24px;
+    }
+
+    .date-nav-inner {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    .date-nav-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .date-display-wrap {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      position: relative;
+    }
+
+    .date-display {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: var(--radius-btn);
+      transition: background 0.15s;
+      user-select: none;
+    }
+    .date-display:hover { background: rgba(255,255,255,0.05); }
+    .date-display:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    #date-picker {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      width: 1px;
+      height: 1px;
+      bottom: -4px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .stats-bar {
+      text-align: center;
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      letter-spacing: 0.03em;
+    }
+
+    .stats-bar span { margin: 0 8px; }
+    .stats-bar .dot { color: var(--border); margin: 0 2px; }
+
+    /* ── Loading skeleton pulse ───────────────────────────────── */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .skeleton {
+      background: var(--border);
+      border-radius: 4px;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    .skeleton-line {
+      height: 14px;
+      margin-bottom: 8px;
+      border-radius: 4px;
+      background: var(--border);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    /* ── Loading spinner ─────────────────────────────────────── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      flex-shrink: 0;
+    }
+
+    /* ── Section: Summary ─────────────────────────────────────── */
+    .summary-text {
+      font-size: 15px;
+      line-height: 1.75;
+      color: var(--text);
+    }
+
+    .summary-footer {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .regenerate-link {
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: var(--font);
+      padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      transition: color 0.15s;
+    }
+    .regenerate-link:hover { color: var(--accent); }
+
+    /* ── Section: Insights ────────────────────────────────────── */
+    .insight-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(42, 63, 102, 0.3);
+    }
+    .insight-row:last-child { border-bottom: none; }
+    .insight-icon { color: var(--warning); font-size: 14px; flex-shrink: 0; margin-top: 2px; }
+    .insight-text { font-size: 14px; color: var(--text); line-height: 1.55; }
+
+    /* ── Section: Activity Log ────────────────────────────────── */
+    .activity-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .activity-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 14px 16px;
+      border-left: 3px solid var(--border);
+      border-radius: 0 6px 6px 0;
+      background: rgba(15, 27, 45, 0.3);
+      transition: background 0.12s;
+    }
+    .activity-row:hover { background: rgba(42, 63, 102, 0.25); }
+
+    .activity-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .activity-time {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(42, 63, 102, 0.5);
+      padding: 2px 8px;
+      border-radius: 3px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .activity-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    .activity-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.55;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .activity-desc.expanded {
+      -webkit-line-clamp: unset;
+      overflow: visible;
+    }
+
+    .activity-expand {
+      background: none;
+      border: none;
+      font-family: var(--font);
+      font-size: 12px;
+      color: var(--accent);
+      cursor: pointer;
+      padding: 0;
+      align-self: flex-start;
+      transition: color 0.12s;
+    }
+    .activity-expand:hover { color: var(--accent-hover); }
+
+    /* ── Content loading state ────────────────────────────────── */
+    .content-loading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 4px 0;
+    }
+
+    /* ── Section: Timeline ────────────────────────────────────── */
+    .timeline-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .session-row {
+      border-radius: 6px;
+      padding: 10px 12px;
+      transition: background 0.12s;
+    }
+    .session-row:hover { background: rgba(42, 63, 102, 0.5); }
+
+    .session-main {
+      display: grid;
+      grid-template-columns: 130px 1fr auto;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .session-time {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .session-app-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .app-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      color: #fff;
+    }
+
+    .app-name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .session-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .session-windows {
+      grid-column: 2 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+      margin-left: 38px;
+    }
+
+    .window-tag {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      background: rgba(42, 63, 102, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 260px;
+    }
+
+    .samples-toggle {
+      background: none;
+      border: none;
+      font-family: var(--font);
+      font-size: 11.5px;
+      color: var(--accent);
+      cursor: pointer;
+      padding: 4px 0 0;
+      margin-left: 38px;
+      display: block;
+      transition: color 0.12s;
+    }
+    .samples-toggle:hover { color: var(--accent-hover); }
+
+    .samples-list {
+      margin-top: 8px;
+      margin-left: 38px;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .samples-list.open { display: flex; }
+
+    .sample-item {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      background: rgba(15, 27, 45, 0.6);
+      border-left: 2px solid var(--border);
+      padding: 5px 10px;
+      border-radius: 0 4px 4px 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .timeline-separator {
+      height: 1px;
+      background: var(--border);
+      margin: 6px 0;
+    }
+
+    /* ── Section: Meetings ────────────────────────────────────── */
+    .meetings-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .meeting-card {
+      background: rgba(15, 27, 45, 0.5);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .meeting-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+    }
+
+    .meeting-icon { font-size: 18px; flex-shrink: 0; }
+
+    .meeting-info { flex: 1; min-width: 0; }
+
+    .meeting-app {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .meeting-time {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      margin-top: 1px;
+    }
+
+    .meeting-title {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .meeting-duration {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-family: var(--font-mono);
+      white-space: nowrap;
+    }
+
+    .transcript-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      padding: 8px 16px;
+      background: rgba(42, 63, 102, 0.25);
+      border: none;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+      text-align: left;
+    }
+    .transcript-toggle:hover { background: rgba(42, 63, 102, 0.5); color: var(--text); }
+
+    .transcript-toggle .toggle-arrow {
+      margin-left: auto;
+      transition: transform 0.2s;
+      font-size: 10px;
+    }
+    .transcript-toggle.open .toggle-arrow { transform: rotate(180deg); }
+
+    .transcript-body {
+      display: none;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: rgba(15, 27, 45, 0.4);
+    }
+    .transcript-body.open { display: block; }
+
+    .transcript-entry {
+      display: grid;
+      grid-template-columns: 80px 70px 1fr;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 12.5px;
+      border-bottom: 1px solid rgba(42, 63, 102, 0.4);
+    }
+    .transcript-entry:last-child { border-bottom: none; }
+
+    .entry-time {
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      font-size: 11.5px;
+    }
+    .entry-speaker { color: var(--accent); font-weight: 500; }
+    .entry-text    { color: var(--text); }
+
+    /* ── Section: Search ──────────────────────────────────────── */
+    .search-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 200px;
+      background: rgba(15, 27, 45, 0.7);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-btn);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-input:focus { border-color: var(--accent); }
+
+    .search-options {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .search-options input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+    }
+
+    .search-results {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .result-item {
+      background: rgba(15, 27, 45, 0.5);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      transition: border-color 0.12s;
+    }
+    .result-item:hover { border-color: var(--accent); }
+
+    .result-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .result-type {
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      padding: 2px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+    }
+    .result-type.ocr   { background: rgba(74, 158, 255, 0.15); color: var(--accent); }
+    .result-type.audio { background: rgba(74, 222, 128, 0.12); color: var(--success); }
+
+    .result-time {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .result-source {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .result-text {
+      font-size: 13.5px;
+      color: var(--text);
+      line-height: 1.55;
+    }
+
+    .result-text mark {
+      background: rgba(74, 158, 255, 0.25);
+      color: var(--accent);
+      border-radius: 2px;
+      padding: 0 2px;
+    }
+
+    /* ── Empty / Error states ─────────────────────────────────── */
+    .empty-state {
+      padding: 24px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .error-state {
+      padding: 12px 16px;
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.25);
+      border-radius: 6px;
+      color: var(--error);
+      font-size: 13px;
+    }
+
+    /* ── Skeleton loaders ─────────────────────────────────────── */
+    .skeleton-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* ── Misc ─────────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Usage Bar ──────────────────────────────────────────────── */
+    .usage-bar {
+      display: flex;
+      height: 4px;
+      border-radius: 2px;
+      overflow: hidden;
+      gap: 1px;
+    }
+    .usage-bar-segment { height: 100%; transition: flex 0.3s ease; }
+    .usage-bar-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .usage-bar-legend-item { display: flex; align-items: center; gap: 4px; }
+    .usage-bar-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+    /* ── Section: Role Breakdown ─────────────────────────────── */
+    .role-bar-container {
+      margin-bottom: 4px;
+    }
+
+    .role-bar {
+      display: flex;
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+      gap: 2px;
+    }
+    .role-bar-segment {
+      height: 100%;
+      border-radius: 3px;
+      transition: flex 0.3s ease;
+      position: relative;
+    }
+
+    .role-breakdown-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+    }
+
+    .role-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .role-item:hover { background: rgba(42, 63, 102, 0.4); }
+    .role-item.active { background: rgba(42, 63, 102, 0.6); border: 1px solid var(--border); }
+
+    .role-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .role-info { flex: 1; min-width: 0; }
+
+    .role-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .role-time {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .role-pct {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: var(--font-mono);
+    }
+
+    /* ── Section: Action Items ────────────────────────────────── */
+    .action-item-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(42, 63, 102, 0.3);
+    }
+    .action-item-row:last-child { border-bottom: none; }
+
+    .action-checkbox {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .action-checkbox:hover { border-color: var(--accent); }
+
+    .action-content { flex: 1; min-width: 0; }
+
+    .action-text {
+      font-size: 14px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .action-context {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Responsive ───────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .session-main {
+        grid-template-columns: 110px 1fr;
+      }
+      .session-meta { display: none; }
+
+      .transcript-entry {
+        grid-template-columns: 60px 60px 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Date Navigation Bar -->
+  <nav class="date-nav" role="navigation" aria-label="Day navigation">
+    <div class="date-nav-inner">
+      <div class="date-nav-row">
+        <button class="btn btn-nav" id="btn-prev" aria-label="Previous day">&#8592;</button>
+
+        <div class="date-display-wrap">
+          <span class="date-display" id="date-display" title="Click to pick a date" role="button" tabindex="0" aria-label="Current date, click to open date picker">—</span>
+          <input type="date" id="date-picker" aria-label="Date picker" />
+        </div>
+
+        <button class="btn btn-nav" id="btn-next" aria-label="Next day">&#8594;</button>
+      </div>
+      <div class="stats-bar" id="stats-bar" aria-live="polite">&nbsp;</div>
+      <div id="usage-bar-wrap" style="margin-top:8px;"></div>
+    </div>
+  </nav>
+
+  <!-- Page content -->
+  <main class="page" role="main">
+
+    <!-- Section: Day Summary -->
+    <section aria-labelledby="summary-heading">
+      <div class="card" id="card-summary">
+        <p class="card-heading" id="summary-heading">Day Summary</p>
+        <div id="summary-content">
+          <div class="skeleton-block" aria-busy="true" aria-label="Loading summary">
+            <div class="skeleton-line" style="width:92%"></div>
+            <div class="skeleton-line" style="width:80%"></div>
+            <div class="skeleton-line" style="width:86%"></div>
+            <div class="skeleton-line" style="width:60%"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Role Breakdown -->
+    <section aria-labelledby="roles-heading" id="section-roles" class="hidden">
+      <div class="card" id="card-roles">
+        <p class="card-heading" id="roles-heading">Role Breakdown</p>
+        <div id="roles-content"></div>
+      </div>
+    </section>
+
+    <!-- Section: Activity Log -->
+    <section aria-labelledby="activities-heading" id="section-activities" class="hidden">
+      <div class="card" id="card-activities">
+        <p class="card-heading" id="activities-heading">Activity Log</p>
+        <div id="activities-content"></div>
+      </div>
+    </section>
+
+    <!-- Section: Action Items -->
+    <section aria-labelledby="actions-heading" id="section-actions" class="hidden">
+      <div class="card" id="card-actions">
+        <p class="card-heading" id="actions-heading">Action Items</p>
+        <div id="actions-content"></div>
+      </div>
+    </section>
+
+    <!-- Section: Insights -->
+    <section aria-labelledby="insights-heading" id="section-insights" class="hidden">
+      <div class="card" id="card-insights">
+        <p class="card-heading" id="insights-heading">Insights</p>
+        <div id="insights-content"></div>
+      </div>
+    </section>
+
+    <!-- Section: Meetings -->
+    <section aria-labelledby="meetings-heading">
+      <div class="card" id="card-meetings">
+        <p class="card-heading" id="meetings-heading">Meetings</p>
+        <div id="meetings-content">
+          <div class="skeleton-block" aria-busy="true" aria-label="Loading meetings">
+            <div class="skeleton-line" style="width:55%"></div>
+            <div class="skeleton-line" style="width:40%"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Timeline -->
+    <section aria-labelledby="timeline-heading">
+      <div class="card" id="card-timeline">
+        <p class="card-heading" id="timeline-heading">Activity Timeline</p>
+        <div id="timeline-content">
+          <div class="skeleton-block" aria-busy="true" aria-label="Loading timeline">
+            <div class="skeleton-line" style="width:75%"></div>
+            <div class="skeleton-line" style="width:88%"></div>
+            <div class="skeleton-line" style="width:65%"></div>
+            <div class="skeleton-line" style="width:82%"></div>
+            <div class="skeleton-line" style="width:70%"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Search -->
+    <section aria-labelledby="search-heading">
+      <div class="card" id="card-search">
+        <p class="card-heading" id="search-heading">Search</p>
+
+        <div class="search-row">
+          <input
+            type="search"
+            id="search-input"
+            class="search-input"
+            placeholder="Search screen &amp; audio..."
+            aria-label="Search screen and audio content"
+            autocomplete="off"
+          />
+          <button class="btn btn-primary" id="btn-search" aria-label="Run search">Search</button>
+          <label class="search-options">
+            <input type="checkbox" id="search-current-day" checked />
+            Current day only
+          </label>
+        </div>
+
+        <div id="search-results" role="region" aria-live="polite" aria-label="Search results"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // ── State ──────────────────────────────────────────────────────────
+    let currentDate    = null;   // "2024-02-23"
+    let availableDays  = [];
+    let pollTimer      = null;   // interval id for content polling
+    let pollStart      = null;   // timestamp when polling began
+    let roleFilter     = null;   // active role filter (null = show all)
+    let lastRolesData  = null;   // cached roles array for filtering
+    let lastTimeline   = null;   // cached timeline for re-rendering
+
+    // ── Helpers ────────────────────────────────────────────────────────
+
+    /** Format ISO timestamp to local HH:MM */
+    function fmtTime(ts) {
+      if (!ts) return '—';
+      try {
+        return new Date(ts).toLocaleTimeString('en-US', {
+          hour: '2-digit', minute: '2-digit', hour12: false
+        });
+      } catch { return ts; }
+    }
+
+    /** Format a date string to human-readable, e.g. "Monday, February 23, 2026" */
+    function fmtDateLong(dateStr) {
+      if (!dateStr) return '—';
+      try {
+        // Parse as local date to avoid timezone-shift to previous day
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        return dt.toLocaleDateString('en-US', {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+      } catch { return dateStr; }
+    }
+
+    /** Escape HTML special chars */
+    function esc(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    /** Validate a hex color string to prevent style injection */
+    function safeColor(c) {
+      return /^#[0-9A-Fa-f]{3,8}$/.test(c) ? c : '#64748B';
+    }
+
+    /** Deterministic pastel colour from app name first letter */
+    function appColor(name) {
+      const palette = [
+        '#4A9EFF','#7C6FFF','#FF6B6B','#4ADE80',
+        '#FBBF24','#F472B6','#34D399','#60A5FA',
+        '#A78BFA','#FB923C',
+      ];
+      const code = (name || 'A').toUpperCase().charCodeAt(0);
+      return palette[code % palette.length];
+    }
+
+    /** Highlight keyword occurrences in a text string */
+    function highlightKeyword(text, keyword) {
+      if (!keyword) return esc(text);
+      const safe = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re   = new RegExp(`(${safe})`, 'gi');
+      return esc(text).replace(re, '<mark>$1</mark>');
+    }
+
+    // ── UI Update helpers ──────────────────────────────────────────────
+
+    function setSkeletonLoading(elId) {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.innerHTML = `
+        <div class="skeleton-block" aria-busy="true">
+          <div class="skeleton-line" style="width:88%"></div>
+          <div class="skeleton-line" style="width:72%"></div>
+          <div class="skeleton-line" style="width:80%"></div>
+        </div>`;
+    }
+
+    function setError(elId, message) {
+      const el = document.getElementById(elId);
+      if (el) el.innerHTML = `<div class="error-state" role="alert">&#9888;&#xFE0F; ${esc(message)}</div>`;
+    }
+
+    function setEmpty(elId, message) {
+      const el = document.getElementById(elId);
+      if (el) el.innerHTML = `<div class="empty-state">${esc(message)}</div>`;
+    }
+
+    // ── Date Navigation ────────────────────────────────────────────────
+
+    function updateDateDisplay() {
+      const display = document.getElementById('date-display');
+      const picker  = document.getElementById('date-picker');
+      if (display) display.textContent = fmtDateLong(currentDate);
+      if (picker)  picker.value = currentDate || '';
+      updateNavButtons();
+    }
+
+    function updateNavButtons() {
+      const idx  = availableDays.indexOf(currentDate);
+      const btnP = document.getElementById('btn-prev');
+      const btnN = document.getElementById('btn-next');
+
+      // days are newest-first or oldest-first? We sort ascending, so:
+      // prev = earlier date (lower index if sorted asc) → idx - 1
+      // next = later date → idx + 1
+      if (btnP) btnP.disabled = (idx <= 0);
+      if (btnN) btnN.disabled = (idx < 0 || idx >= availableDays.length - 1);
+    }
+
+    function navigateDay(offset) {
+      const idx = availableDays.indexOf(currentDate);
+      if (idx < 0) return;
+      const newIdx = idx + offset;
+      if (newIdx < 0 || newIdx >= availableDays.length) return;
+      loadDay(availableDays[newIdx]);
+    }
+
+    // ── Render: Stats bar ──────────────────────────────────────────────
+
+    function renderStats(stats, audioCount, roles, focusMinutes) {
+      const bar = document.getElementById('stats-bar');
+      if (!bar) return;
+
+      const apps = stats?.unique_apps ?? 0;
+
+      // Compute focus and meeting hours from roles data
+      const focusHrs = focusMinutes > 0 ? `${(focusMinutes / 60).toFixed(1)}h focused` : '';
+      const meetingRole = (roles || []).find(r => r.role === 'Meetings');
+      const meetingHrs = meetingRole ? `${(meetingRole.minutes / 60).toFixed(1)}h meetings` : '';
+
+      const parts = [];
+      if (focusHrs) parts.push(focusHrs);
+      if (meetingHrs) parts.push(meetingHrs);
+      parts.push(`${apps} apps`);
+
+      bar.innerHTML = parts.map(p => `<span>${p}</span>`).join('<span class="dot">\u00b7</span>');
+    }
+
+    // ── Render: Content (Summary + Insights + Activity Log) ───────────
+
+    function stopPolling() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      pollStart = null;
+    }
+
+    function setContentLoadingState() {
+      const loadingHtml = `
+        <div class="content-loading" aria-busy="true">
+          <div class="spinner"></div> Analyzing your day…
+        </div>`;
+      const summaryEl = document.getElementById('summary-content');
+      const insightsEl = document.getElementById('insights-content');
+      const activitiesEl = document.getElementById('activities-content');
+      if (summaryEl) summaryEl.innerHTML = loadingHtml;
+      if (insightsEl) insightsEl.innerHTML = loadingHtml;
+      if (activitiesEl) activitiesEl.innerHTML = loadingHtml;
+      // Show secondary cards during loading so spinner is visible
+      document.getElementById('section-insights')?.classList.remove('hidden');
+      document.getElementById('section-activities')?.classList.remove('hidden');
+    }
+
+    function renderContent(content, generating) {
+      const summaryEl = document.getElementById('summary-content');
+      const insightsSection = document.getElementById('section-insights');
+      const activitiesSection = document.getElementById('section-activities');
+      const insightsEl = document.getElementById('insights-content');
+      const activitiesEl = document.getElementById('activities-content');
+
+      if (!content) {
+        if (generating) {
+          setContentLoadingState();
+          startPolling();
+        } else {
+          // Content is null and not generating — show generate prompt
+          stopPolling();
+          if (summaryEl) summaryEl.innerHTML = `
+            <p style="color:var(--text-muted);font-size:14px;margin-bottom:14px;">No summary yet for this day.</p>
+            <button class="btn btn-primary" onclick="generateSummary(false)" aria-label="Generate daily summary">
+              Generate Summary
+            </button>`;
+          insightsSection?.classList.add('hidden');
+          activitiesSection?.classList.add('hidden');
+          document.getElementById('section-actions')?.classList.add('hidden');
+        }
+        return;
+      }
+
+      stopPolling();
+
+      // Day Summary card
+      if (summaryEl) {
+        const summaryText = content.summary ? esc(content.summary) : '<span style="color:var(--text-muted)">No summary available.</span>';
+        summaryEl.innerHTML = `
+          <p class="summary-text">${summaryText}</p>
+          <div class="summary-footer">
+            <button class="regenerate-link" onclick="generateSummary(true)" aria-label="Regenerate summary">
+              &#8635; Regenerate
+            </button>
+          </div>`;
+      }
+
+      // Insights card
+      const insights = Array.isArray(content.insights) ? content.insights : [];
+      if (insights.length > 0) {
+        insightsSection?.classList.remove('hidden');
+        if (insightsEl) {
+          insightsEl.innerHTML = insights.map(insight => `
+            <div class="insight-row">
+              <span class="insight-icon" aria-hidden="true">&#9733;</span>
+              <span class="insight-text">${esc(insight)}</span>
+            </div>`).join('');
+        }
+      } else {
+        insightsSection?.classList.add('hidden');
+      }
+
+      // Activity Log card
+      const activities = Array.isArray(content.activities) ? content.activities : [];
+      if (activities.length > 0) {
+        activitiesSection?.classList.remove('hidden');
+        if (activitiesEl) {
+          // Sort activities chronologically by time field
+          const sorted = [...activities].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+          const rows = sorted.map((act, i) => {
+            // Strip "(Pacific)" or similar timezone labels from time
+            const time = (act.time || '').replace(/\s*\(.*?\)\s*/g, '').trim();
+            const desc = act.description || '';
+            const needsExpand = desc.length > 200;
+            const descId = `act-desc-${i}`;
+
+            return `
+              <div class="activity-row">
+                <div class="activity-header">
+                  ${time ? `<span class="activity-time">${esc(time)}</span>` : ''}
+                  <span class="activity-title">${esc(act.title || '')}</span>
+                </div>
+                ${desc ? `<div class="activity-desc" id="${descId}">${esc(desc)}</div>` : ''}
+                ${needsExpand ? `<button class="activity-expand" onclick="toggleActivityDesc('${descId}', this)">Show more</button>` : ''}
+              </div>`;
+          });
+          activitiesEl.innerHTML = `<div class="activity-list">${rows.join('')}</div>`;
+        }
+      } else {
+        activitiesSection?.classList.add('hidden');
+      }
+
+      // Action Items card
+      const nextSteps = Array.isArray(content.next_steps) ? content.next_steps : [];
+      renderActionItems(nextSteps);
+    }
+
+    function startPolling() {
+      if (pollTimer) return; // already polling
+      pollStart = Date.now();
+      const dateSnapshot = currentDate;
+
+      pollTimer = setInterval(async () => {
+        // Stop if user navigated away
+        if (currentDate !== dateSnapshot) { stopPolling(); return; }
+
+        // Timeout after 60 seconds
+        if (Date.now() - pollStart > 60000) {
+          stopPolling();
+          const summaryEl = document.getElementById('summary-content');
+          if (summaryEl) summaryEl.innerHTML = `
+            <p style="color:var(--text-muted);font-size:14px;margin-bottom:14px;">
+              Summary generation taking longer than expected.
+            </p>
+            <button class="btn btn-ghost" onclick="generateSummary(true)" aria-label="Retry summary generation">
+              Retry
+            </button>`;
+          document.getElementById('section-insights')?.classList.add('hidden');
+          document.getElementById('section-activities')?.classList.add('hidden');
+          return;
+        }
+
+        try {
+          const resp = await fetch(`/api/day/${dateSnapshot}`);
+          if (!resp.ok) return;
+          const data = await resp.json();
+          if (data.content) {
+            renderContent(data.content, false);
+          }
+        } catch { /* silent — keep polling */ }
+      }, 3000);
+    }
+
+    async function generateSummary(force = false) {
+      if (!currentDate) return;
+      setContentLoadingState();
+
+      try {
+        const resp = await fetch(`/api/summarize/${currentDate}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force }),
+        });
+
+        if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+        const data = await resp.json();
+
+        // Backend may return structured content directly, or signal generating=true
+        if (data.content) {
+          renderContent(data.content, false);
+        } else {
+          renderContent(null, true);
+        }
+      } catch (err) {
+        setError('summary-content', `Failed to generate summary: ${err.message}`);
+        document.getElementById('section-insights')?.classList.add('hidden');
+        document.getElementById('section-activities')?.classList.add('hidden');
+      }
+    }
+
+    // ── Render: Timeline ───────────────────────────────────────────────
+
+    function renderTimeline(timeline) {
+      const el = document.getElementById('timeline-content');
+      if (!el) return;
+
+      // Cache for role filtering re-renders
+      lastTimeline = timeline;
+
+      if (!Array.isArray(timeline) || timeline.length === 0) {
+        setEmpty('timeline-content', 'No activity recorded for this day.');
+        return;
+      }
+
+      // Apply role filter if active
+      let filtered = timeline;
+      if (roleFilter) {
+        filtered = timeline.filter(session => (session.role || 'Other') === roleFilter);
+        if (filtered.length === 0) {
+          el.innerHTML = `<div class="empty-state">No ${esc(roleFilter)} sessions found.</div>`;
+          return;
+        }
+      }
+
+      const rows = filtered.map((session, i) => {
+        const appName    = session.app || 'Unknown';
+        const letter     = appName.charAt(0).toUpperCase();
+        const color      = appColor(appName);
+        const startFmt   = fmtTime(session.start);
+        const endFmt     = fmtTime(session.end);
+        const frames     = session.frame_count ?? session.frames ?? 0;
+        const windows    = Array.isArray(session.windows) ? session.windows : [];
+        const samples    = Array.isArray(session.samples)  ? session.samples  : [];
+        const winCount   = windows.length;
+        const sampId     = `samples-${i}`;
+
+        const windowTags = windows.slice(0, 6).map(w =>
+          `<span class="window-tag" title="${esc(w)}">${esc(w)}</span>`
+        ).join('');
+
+        const moreWin = windows.length > 6
+          ? `<span class="window-tag" style="color:var(--text-muted)">+${windows.length - 6} more</span>`
+          : '';
+
+        const samplesHtml = samples.length > 0 ? `
+          <button
+            class="samples-toggle"
+            onclick="toggleSamples('${sampId}', this)"
+            aria-expanded="false"
+            aria-controls="${sampId}"
+          >Show samples &#9660;</button>
+          <div class="samples-list" id="${sampId}" role="region">
+            ${samples.map(s => `<div class="sample-item">${esc(s)}</div>`).join('')}
+          </div>` : '';
+
+        const sep = i < filtered.length - 1 ? '<div class="timeline-separator"></div>' : '';
+
+        return `
+          <div class="session-row">
+            <div class="session-main">
+              <span class="session-time">${esc(startFmt)} – ${esc(endFmt)}</span>
+              <div class="session-app-row">
+                <div class="app-icon" style="background:${color}" aria-hidden="true">${esc(letter)}</div>
+                <span class="app-name">${esc(appName)}</span>
+              </div>
+              <div class="session-meta">
+                ${winCount > 0 ? `${winCount} window${winCount !== 1 ? 's' : ''}  &bull;` : ''}
+                ${frames} frame${frames !== 1 ? 's' : ''}
+              </div>
+            </div>
+            ${windowTags || moreWin ? `<div class="session-windows">${windowTags}${moreWin}</div>` : ''}
+            ${samplesHtml}
+          </div>${sep}`;
+      });
+
+      el.innerHTML = `<div class="timeline-list">${rows.join('')}</div>`;
+    }
+
+    function renderRoleBar(roles) {
+      const wrap = document.getElementById('usage-bar-wrap');
+      if (!wrap || !Array.isArray(roles) || roles.length === 0) {
+        if (wrap) wrap.innerHTML = '';
+        return;
+      }
+
+      const segments = roles.map(r =>
+        `<div class="role-bar-segment" title="${esc(r.role)}: ${r.pct}% (${r.minutes}m)" style="flex:${r.minutes};background:${safeColor(r.color)}"></div>`
+      ).join('');
+
+      const legend = roles.map(r =>
+        `<div class="usage-bar-legend-item"><div class="usage-bar-dot" style="background:${safeColor(r.color)}"></div><span>${esc(r.role)} ${r.pct}%</span></div>`
+      ).join('');
+
+      wrap.innerHTML = `<div class="role-bar">${segments}</div><div class="usage-bar-legend">${legend}</div>`;
+    }
+
+    function renderRoleBreakdown(roles) {
+      const section = document.getElementById('section-roles');
+      const el = document.getElementById('roles-content');
+      if (!section || !el) return;
+
+      if (!Array.isArray(roles) || roles.length === 0) {
+        section.classList.add('hidden');
+        return;
+      }
+
+      section.classList.remove('hidden');
+
+      const items = roles.map(r => {
+        const hrs = Math.floor(r.minutes / 60);
+        const mins = r.minutes % 60;
+        const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+        const isActive = roleFilter === r.role;
+
+        return `
+          <div class="role-item${isActive ? ' active' : ''}" onclick="toggleRoleFilter('${esc(r.role)}')" title="Click to filter timeline">
+            <div class="role-dot" style="background:${safeColor(r.color)}"></div>
+            <div class="role-info">
+              <div class="role-name">${esc(r.role)}</div>
+              <div class="role-time">${timeStr}</div>
+            </div>
+            <span class="role-pct">${r.pct}%</span>
+          </div>`;
+      });
+
+      el.innerHTML = `<div class="role-breakdown-list">${items.join('')}</div>`;
+    }
+
+    function toggleRoleFilter(role) {
+      roleFilter = roleFilter === role ? null : role;
+      renderRoleBreakdown(lastRolesData);
+      renderTimeline(lastTimeline);
+    }
+
+    function renderActionItems(nextSteps) {
+      const section = document.getElementById('section-actions');
+      const el = document.getElementById('actions-content');
+      if (!section || !el) return;
+
+      if (!Array.isArray(nextSteps) || nextSteps.length === 0) {
+        section.classList.add('hidden');
+        return;
+      }
+
+      section.classList.remove('hidden');
+
+      const items = nextSteps.map(step => `
+        <div class="action-item-row">
+          <div class="action-checkbox"></div>
+          <div class="action-content">
+            <div class="action-text">${esc(step.item || '')}</div>
+            ${step.context ? `<div class="action-context">${esc(step.context)}</div>` : ''}
+          </div>
+        </div>`);
+
+      el.innerHTML = items.join('');
+    }
+
+    function toggleActivityDesc(id, btn) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const expanded = el.classList.toggle('expanded');
+      btn.textContent = expanded ? 'Show less' : 'Show more';
+    }
+
+    function toggleSamples(id, btn) {
+      const el      = document.getElementById(id);
+      const isOpen  = el.classList.toggle('open');
+      btn.setAttribute('aria-expanded', String(isOpen));
+      btn.textContent = isOpen ? 'Hide samples \u25B2' : 'Show samples \u25BC';
+    }
+
+    // ── Render: Meetings ───────────────────────────────────────────────
+
+    function renderMeetings(meetings) {
+      const el = document.getElementById('meetings-content');
+      if (!el) return;
+
+      if (!Array.isArray(meetings) || meetings.length === 0) {
+        setEmpty('meetings-content', 'No meetings detected today.');
+        return;
+      }
+
+      const appIcons = {
+        'google meet': '&#127909;',
+        'zoom':        '&#128249;',
+        'teams':       '&#128101;',
+        'webex':       '&#127911;',
+        'facetime':    '&#128222;',
+      };
+
+      const cards = meetings.map((m, i) => {
+        const appLower   = (m.app || '').toLowerCase();
+        const icon       = Object.entries(appIcons).find(([k]) => appLower.includes(k))?.[1] ?? '&#128197;';
+        const transcript = Array.isArray(m.transcript) ? m.transcript : [];
+        const tId        = `transcript-${i}`;
+        const tToggleId  = `ttoggle-${i}`;
+        const duration   = m.duration_minutes ? `${m.duration_minutes} min` : '';
+
+        const entries = transcript.map(entry => `
+          <div class="transcript-entry">
+            <span class="entry-time">${esc(entry.time || '')}</span>
+            <span class="entry-speaker">${esc(entry.speaker || '')}</span>
+            <span class="entry-text">${esc(entry.text || '')}</span>
+          </div>`).join('');
+
+        const transcriptSection = transcript.length > 0 ? `
+          <button
+            class="transcript-toggle"
+            id="${tToggleId}"
+            onclick="toggleTranscript('${tId}', '${tToggleId}')"
+            aria-expanded="false"
+            aria-controls="${tId}"
+          >
+            Transcript
+            <span style="color:var(--text-muted);margin-left:4px">(${transcript.length} entr${transcript.length !== 1 ? 'ies' : 'y'})</span>
+            <span class="toggle-arrow">&#9660;</span>
+          </button>
+          <div class="transcript-body" id="${tId}" role="region" aria-label="Meeting transcript">
+            ${entries}
+          </div>` : '';
+
+        return `
+          <div class="meeting-card">
+            <div class="meeting-header">
+              <span class="meeting-icon" aria-hidden="true">${icon}</span>
+              <div class="meeting-info">
+                <div class="meeting-app">${esc(m.app || 'Meeting')}</div>
+                <div class="meeting-time">${esc(m.start || '')} – ${esc(m.end || '')}</div>
+                ${m.title ? `<div class="meeting-title">"${esc(m.title)}"</div>` : ''}
+              </div>
+              ${duration ? `<span class="meeting-duration">${esc(duration)}</span>` : ''}
+            </div>
+            ${transcriptSection}
+          </div>`;
+      });
+
+      el.innerHTML = `<div class="meetings-list">${cards.join('')}</div>`;
+    }
+
+    function toggleTranscript(bodyId, toggleId) {
+      const body   = document.getElementById(bodyId);
+      const toggle = document.getElementById(toggleId);
+      if (!body || !toggle) return;
+
+      const isOpen = body.classList.toggle('open');
+      toggle.classList.toggle('open', isOpen);
+      toggle.setAttribute('aria-expanded', String(isOpen));
+    }
+
+    // ── Render: Search results ─────────────────────────────────────────
+
+    function renderSearchResults(results, keyword) {
+      const el = document.getElementById('search-results');
+      if (!el) return;
+
+      if (!Array.isArray(results) || results.length === 0) {
+        el.innerHTML = `<div class="empty-state">No results found.</div>`;
+        return;
+      }
+
+      const items = results.map(r => {
+        const type     = (r.type || 'ocr').toLowerCase();
+        const typeLabel = type === 'audio' ? 'Audio' : 'OCR';
+        const time     = r.timestamp ? fmtTime(r.timestamp) : '';
+        const source   = r.app_name || r.device || '';
+        const window_  = r.window_name || '';
+        const text     = r.text || '';
+        const snippet  = text.length > 280 ? text.slice(0, 280) + '…' : text;
+
+        return `
+          <div class="result-item">
+            <div class="result-meta">
+              <span class="result-type ${type}" aria-label="${typeLabel} result">${typeLabel}</span>
+              ${time ? `<span class="result-time">${esc(time)}</span>` : ''}
+              <span class="result-source">${esc(source)}${window_ ? ` — ${esc(window_)}` : ''}</span>
+            </div>
+            <div class="result-text">${highlightKeyword(snippet, keyword)}</div>
+          </div>`;
+      });
+
+      el.innerHTML = items.join('');
+    }
+
+    // ── Search ─────────────────────────────────────────────────────────
+
+    async function doSearch() {
+      const input   = document.getElementById('search-input');
+      const dayOnly = document.getElementById('search-current-day');
+      const resEl   = document.getElementById('search-results');
+      const btn     = document.getElementById('btn-search');
+
+      const q = (input?.value || '').trim();
+      if (!q) {
+        if (resEl) resEl.innerHTML = '';
+        return;
+      }
+
+      if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner"></div>'; }
+      if (resEl) resEl.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;color:var(--text-muted);font-size:13px;padding:8px 0">
+          <div class="spinner"></div> Searching…
+        </div>`;
+
+      try {
+        const dateParam = (dayOnly?.checked && currentDate) ? `&date=${currentDate}` : '';
+        const resp = await fetch(`/api/search?q=${encodeURIComponent(q)}${dateParam}`);
+        if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+        const data = await resp.json();
+        renderSearchResults(data.results || [], q);
+      } catch (err) {
+        if (resEl) resEl.innerHTML = `<div class="error-state" role="alert">Search failed: ${esc(err.message)}</div>`;
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Search'; }
+      }
+    }
+
+    // ── Load day ───────────────────────────────────────────────────────
+
+    async function loadDay(dateStr) {
+      stopPolling();
+      currentDate = dateStr;
+      updateDateDisplay();
+
+      // Reset sections to loading state
+      setSkeletonLoading('summary-content');
+      setSkeletonLoading('timeline-content');
+      setSkeletonLoading('meetings-content');
+
+      // Hide secondary content cards until data arrives
+      document.getElementById('section-insights')?.classList.add('hidden');
+      document.getElementById('section-activities')?.classList.add('hidden');
+      document.getElementById('section-actions')?.classList.add('hidden');
+      document.getElementById('section-roles')?.classList.add('hidden');
+
+      // Reset role filter on day change
+      roleFilter = null;
+      lastRolesData = null;
+      lastTimeline = null;
+
+      // Clear search results on day change
+      const resEl = document.getElementById('search-results');
+      if (resEl) resEl.innerHTML = '';
+
+      // Clear stats bar
+      const statsBar = document.getElementById('stats-bar');
+      if (statsBar) statsBar.innerHTML = '&nbsp;';
+
+      try {
+        const [dayResp, meetingsResp] = await Promise.all([
+          fetch(`/api/day/${dateStr}`),
+          fetch(`/api/meetings/${dateStr}`),
+        ]);
+
+        if (!dayResp.ok)      throw new Error(`Day data: server returned ${dayResp.status}`);
+        if (!meetingsResp.ok) throw new Error(`Meetings: server returned ${meetingsResp.status}`);
+
+        const dayData      = await dayResp.json();
+        const meetingsData = await meetingsResp.json();
+
+        const roles = dayData.roles || [];
+        lastRolesData = roles;
+
+        renderContent(dayData.content ?? null, dayData.generating ?? false);
+        renderStats(dayData.stats || {}, dayData.audio_count, roles, dayData.focus_minutes ?? 0);
+        renderRoleBar(roles);
+        renderRoleBreakdown(roles);
+        renderTimeline(dayData.timeline || []);
+        renderMeetings(meetingsData.meetings || []);
+
+      } catch (err) {
+        setError('summary-content',  `Failed to load data: ${err.message}`);
+        setError('timeline-content', `Failed to load data: ${err.message}`);
+        setError('meetings-content', `Failed to load data: ${err.message}`);
+      }
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────
+
+    async function init() {
+      try {
+        const resp = await fetch('/api/days');
+        if (!resp.ok) throw new Error(`/api/days returned ${resp.status}`);
+        const data = await resp.json();
+
+        // Sort ascending so index 0 = oldest, last = newest
+        availableDays = (data.days || []).slice().sort();
+
+        if (availableDays.length > 0) {
+          // Default to most recent day
+          currentDate = availableDays[availableDays.length - 1];
+        } else {
+          currentDate = new Date().toISOString().slice(0, 10);
+        }
+
+        // Populate date picker min/max
+        const picker = document.getElementById('date-picker');
+        if (picker && availableDays.length > 0) {
+          picker.min = availableDays[0];
+          picker.max = availableDays[availableDays.length - 1];
+        }
+
+        await loadDay(currentDate);
+
+      } catch (err) {
+        setError('summary-content',  `Initialisation failed: ${err.message}`);
+        setError('timeline-content', 'Could not reach the DayView backend.');
+        setError('meetings-content', 'Could not reach the DayView backend.');
+
+        // Still show a date so the UI isn't blank
+        currentDate = new Date().toISOString().slice(0, 10);
+        updateDateDisplay();
+      }
+    }
+
+    // ── Event listeners ────────────────────────────────────────────────
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Navigation arrows
+      document.getElementById('btn-prev')
+        ?.addEventListener('click', () => navigateDay(-1));
+      document.getElementById('btn-next')
+        ?.addEventListener('click', () => navigateDay(+1));
+
+      // Keyboard left/right arrow keys
+      document.addEventListener('keydown', e => {
+        // Skip if focus is inside a text input
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+        if (e.key === 'ArrowLeft')  navigateDay(-1);
+        if (e.key === 'ArrowRight') navigateDay(+1);
+      });
+
+      // Click on date label opens the hidden date picker
+      const dateDisplay = document.getElementById('date-display');
+      const datePicker  = document.getElementById('date-picker');
+
+      dateDisplay?.addEventListener('click',   () => datePicker?.showPicker?.());
+      dateDisplay?.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          datePicker?.showPicker?.();
+        }
+      });
+
+      datePicker?.addEventListener('change', e => {
+        const picked = e.target.value;
+        if (picked && availableDays.includes(picked)) {
+          loadDay(picked);
+        } else if (picked) {
+          // Date picked has no data — navigate to nearest available
+          const sorted = [...availableDays].sort();
+          const nearest = sorted.find(d => d >= picked) || sorted[sorted.length - 1];
+          if (nearest) loadDay(nearest);
+        }
+      });
+
+      // Search
+      document.getElementById('btn-search')
+        ?.addEventListener('click', doSearch);
+
+      document.getElementById('search-input')
+        ?.addEventListener('keydown', e => {
+          if (e.key === 'Enter') doSearch();
+        });
+
+      // Start app
+      init();
+    });
+  </script>
+
+</body>
+</html>
