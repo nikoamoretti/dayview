@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import requests
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from zoneinfo import ZoneInfo
 from difflib import SequenceMatcher
 
@@ -43,11 +43,19 @@ def get_db() -> sqlite3.Connection:
 # Date helpers
 # ---------------------------------------------------------------------------
 def get_date_bounds(d: date) -> tuple[str, str]:
-    """Return ISO UTC timestamps for the start and end of a Pacific calendar day."""
-    # Construct midnight PT then convert to UTC-aware ISO for DB queries.
+    """Return ISO UTC timestamps for the start and end of a Pacific calendar day.
+
+    The DB stores all timestamps as UTC with a +00:00 suffix.  SQLite compares
+    TEXT columns lexicographically, so both sides of the comparison MUST use the
+    same UTC offset (+00:00) — otherwise the string sort order is wrong and
+    frames after ~4 PM PT (i.e. after midnight UTC) are silently excluded.
+    """
     start_pt = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=PACIFIC)
     end_pt = start_pt + timedelta(days=1)
-    return start_pt.isoformat(), end_pt.isoformat()
+    # Convert to UTC so the text comparison in SQLite is apples-to-apples.
+    start_utc = start_pt.astimezone(timezone.utc).isoformat()
+    end_utc   = end_pt.astimezone(timezone.utc).isoformat()
+    return start_utc, end_utc
 
 
 # ---------------------------------------------------------------------------
@@ -239,10 +247,17 @@ def build_activity_text(ocr_frames: list[dict], audio: list[dict]) -> str:
     sessions = build_timeline(ocr_frames)
     lines.append("=== SCREEN ACTIVITY ===\n")
 
+    def _to_pt_hhmm(ts: str) -> str:
+        """Convert a UTC ISO timestamp string to HH:MM in Pacific time."""
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return dt.astimezone(PACIFIC).strftime("%H:%M")
+        except (ValueError, AttributeError):
+            return ts[11:16] if len(ts) > 16 else ts
+
     for s in sessions:
-        # Timestamps are UTC ISO strings from the DB; trim to HH:MM for display.
-        start_short = s["start"][11:16] if len(s["start"]) > 16 else s["start"]
-        end_short = s["end"][11:16] if len(s["end"]) > 16 else s["end"]
+        start_short = _to_pt_hhmm(s["start"])
+        end_short   = _to_pt_hhmm(s["end"])
         windows_str = ", ".join(s["windows"][:8])
         lines.append(f"[{start_short}–{end_short}] {s['app']} — {windows_str}")
         for sample in s["samples"]:
@@ -269,16 +284,17 @@ def build_activity_text(ocr_frames: list[dict], audio: list[dict]) -> str:
             if any(name in text_lower for name in IGNORE_SPEAKERS):
                 continue
 
-            # Work-hours gate
+            # Work-hours gate (and convert to PT for display)
+            ts_short = ts_str[11:16]  # fallback if parse fails
             try:
                 ts_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                local_hour = ts_dt.astimezone(PACIFIC).hour
+                ts_pt = ts_dt.astimezone(PACIFIC)
+                local_hour = ts_pt.hour
                 if local_hour < WORK_HOUR_START or local_hour >= WORK_HOUR_END:
                     continue
+                ts_short = ts_pt.strftime("%H:%M")
             except (ValueError, AttributeError):
                 pass
-
-            ts_short = ts_str[11:16]
             prefix = f"[{ts_short}]"
             if speaker:
                 prefix += f" {speaker}:"
