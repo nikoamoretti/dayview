@@ -2037,6 +2037,34 @@
       font-family: var(--font-mono);
     }
 
+    /* ── Project name inline rename ─────────────────────────────── */
+    .shipped-project-name .project-name-text {
+      cursor: text;
+      border-radius: 4px;
+      padding: 0 4px;
+      margin: -1px -4px;
+    }
+    .shipped-project-name .project-name-text:hover {
+      background: var(--border);
+    }
+    .shipped-project-name .rename-input {
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--accent); border-radius: 4px;
+      padding: 1px 6px; font-size: 14px; font-weight: 600;
+      font-family: inherit; outline: none; min-width: 120px;
+    }
+
+    /* ── Drag and drop ──────────────────────────────────────────── */
+    .shipped-bullet[draggable="true"] { cursor: grab; }
+    .shipped-bullet[draggable="true"]:active { cursor: grabbing; }
+    .shipped-bullet.dragging { opacity: 0.3; }
+    .shipped-project-group.drag-over {
+      outline: 2px dashed var(--accent);
+      outline-offset: -2px;
+      background: rgba(74, 158, 255, 0.04);
+      border-radius: 6px;
+    }
+
     /* ── Inline editing ───────────────────────────────────────────── */
     .shipped-bullet { position: relative; }
     .shipped-bullet .item-actions {
@@ -3732,6 +3760,111 @@
       }, 0);
     }
 
+    // ── Inline rename project from Shipped tab ──────────────────────
+    function startRenameProject(el) {
+      const nameDiv = el.closest('.shipped-project-name');
+      const projectId = +nameDiv.dataset.renamePid;
+      const origName = el.textContent.trim();
+      const input = document.createElement('input');
+      input.className = 'rename-input';
+      input.value = origName;
+      el.replaceWith(input);
+      input.focus();
+      input.select();
+      const save = async () => {
+        if (input._saved) return;
+        input._saved = true;
+        const newName = input.value.trim();
+        if (!newName || newName === origName) {
+          restoreSpan(origName);
+          return;
+        }
+        try {
+          const resp = await fetch(`/api/projects/${projectId}/rename`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName }),
+          });
+          if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || 'Failed'); }
+          _cachedProjectList = null;
+          overviewLoaded = false;
+          loadPortfolio();
+        } catch (err) {
+          alert('Rename failed: ' + err.message);
+          restoreSpan(origName);
+        }
+      };
+      function restoreSpan(text) {
+        const span = document.createElement('span');
+        span.className = 'project-name-text';
+        span.textContent = text;
+        span.setAttribute('ondblclick', 'startRenameProject(this)');
+        input.replaceWith(span);
+      }
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); save(); }
+        if (e.key === 'Escape') { restoreSpan(origName); }
+      });
+      input.addEventListener('blur', save);
+    }
+
+    // ── Drag-and-drop between project groups ────────────────────────
+    function onItemDragStart(e) {
+      const bullet = e.target.closest('.shipped-bullet');
+      if (!bullet) return;
+      bullet.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/json', JSON.stringify({
+        entryId: +bullet.dataset.entryId,
+        field: bullet.dataset.field,
+        itemIndex: +bullet.dataset.itemIndex,
+        date: bullet.dataset.date,
+        sourcePid: +bullet.dataset.pid,
+      }));
+    }
+
+    function onItemDragEnd(e) {
+      e.target.closest('.shipped-bullet')?.classList.remove('dragging');
+      document.querySelectorAll('.shipped-project-group.drag-over').forEach(el => el.classList.remove('drag-over'));
+    }
+
+    function onProjectDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const group = e.target.closest('.shipped-project-group');
+      if (group) group.classList.add('drag-over');
+    }
+
+    function onProjectDragLeave(e) {
+      const group = e.target.closest('.shipped-project-group');
+      if (group && !group.contains(e.relatedTarget)) group.classList.remove('drag-over');
+    }
+
+    async function onProjectDrop(e) {
+      e.preventDefault();
+      const group = e.target.closest('.shipped-project-group');
+      if (!group) return;
+      group.classList.remove('drag-over');
+      let payload;
+      try { payload = JSON.parse(e.dataTransfer.getData('application/json')); } catch { return; }
+      const targetPid = +group.dataset.dropPid;
+      const targetDate = group.dataset.dropDate;
+      // Only allow drops within the same day
+      if (targetDate !== payload.date) return;
+      // No-op if dropping on the same project
+      if (targetPid === payload.sourcePid) return;
+      try {
+        const resp = await fetch('/api/shipped/move-item', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entry_id: payload.entryId, field: payload.field, item_index: payload.itemIndex, target_project_id: targetPid, date: payload.date }),
+        });
+        if (!resp.ok) { const err = await resp.json(); throw new Error(err.error || 'Failed'); }
+        overviewLoaded = false;
+        loadPortfolio();
+      } catch (err) {
+        alert('Move failed: ' + err.message);
+      }
+    }
+
     async function loadPortfolio() {
       const container = document.getElementById('tab-overview');
       if (!container) return;
@@ -3791,18 +3924,22 @@
                  </span>`
               : '';
             const textClick = editable ? `onclick="startEditItem(this)"` : '';
+            const dragAttrs = editable
+              ? `draggable="true" ondragstart="onItemDragStart(event)" ondragend="onItemDragEnd(event)"`
+              : '';
             return `
-              <div class="shipped-bullet" ${dataAttrs}>
+              <div class="shipped-bullet" ${dataAttrs} ${dragAttrs}>
                 <span class="indicator ${esc(item.type)}">${ind}</span>
                 <span class="bullet-text" ${textClick}>${commitBadge}${esc(item.text)}</span>
                 ${actionsHtml}
               </div>`;
           }).join('');
           return `
-            <div class="shipped-project-group">
-              <div class="shipped-project-name">
+            <div class="shipped-project-group" data-drop-pid="${pg.project_id}" data-drop-date="${esc(dayDate || '')}"
+                 ondragover="onProjectDragOver(event)" ondragleave="onProjectDragLeave(event)" ondrop="onProjectDrop(event)">
+              <div class="shipped-project-name" data-rename-pid="${pg.project_id}">
                 <span class="shipped-tag-dot" style="background:${dotColor}"></span>
-                ${esc(pg.project_name)}
+                <span class="project-name-text" ondblclick="startRenameProject(this)">${esc(pg.project_name)}</span>
               </div>
               ${itemsHtml}
             </div>`;
