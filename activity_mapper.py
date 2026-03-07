@@ -42,6 +42,12 @@ def init_activity_db() -> None:
     """Create project_activity table if it does not already exist."""
     with projects_db.get_db() as conn:
         conn.execute(_CREATE_TABLE)
+        conn.executescript("""
+            CREATE INDEX IF NOT EXISTS idx_project_activity_date
+                ON project_activity(date);
+            CREATE INDEX IF NOT EXISTS idx_project_activity_project_date
+                ON project_activity(project_id, date);
+        """)
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +304,17 @@ def get_total_screen_minutes(d: date) -> float:
     raw = screenpipe.get_ocr_frames(d)
     deduped = screenpipe.deduplicate_ocr(raw)
     return round(len(deduped) * _MINUTES_PER_FRAME, 1)
+
+
+def has_activity_for_date(date_str: str) -> bool:
+    """Return True if the date already has cached project_activity rows."""
+    init_activity_db()
+    with projects_db.get_db() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM project_activity WHERE date = ? LIMIT 1",
+            (date_str,),
+        ).fetchone()
+    return row is not None
 
 
 def get_activity_for_date(date_str: str) -> list[dict]:

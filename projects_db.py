@@ -60,6 +60,16 @@ _DEFAULT_TAGS: dict[str, str] = {
     "Nico To Do":                        "Internal",
 }
 
+_DEFAULT_TAGS_BY_NAME = {
+    name.lower(): tag
+    for name, tag in _DEFAULT_TAGS.items()
+}
+
+
+def get_default_tag(name: str) -> str | None:
+    """Return the default tag for a project name, if one is configured."""
+    return _DEFAULT_TAGS_BY_NAME.get(name.strip().lower())
+
 
 # ---------------------------------------------------------------------------
 # Connection
@@ -135,6 +145,17 @@ def init_db() -> None:
                 source                TEXT,
                 created_at            TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE INDEX IF NOT EXISTS idx_projects_status_name
+                ON projects(status, name);
+            CREATE INDEX IF NOT EXISTS idx_project_entries_date
+                ON project_entries(date);
+            CREATE INDEX IF NOT EXISTS idx_project_entries_project_date
+                ON project_entries(project_id, date);
+            CREATE INDEX IF NOT EXISTS idx_git_summaries_project_date
+                ON git_summaries(project_id, date);
+            CREATE INDEX IF NOT EXISTS idx_corrections_created_at
+                ON corrections(created_at);
         """)
 
         # Migrate: add tag column if missing (existing DBs)
@@ -190,10 +211,11 @@ def upsert_project(
             )
             return existing["id"]
         else:
+            default_tag = get_default_tag(name)
             conn.execute(
-                """INSERT INTO projects (name, description, status, source, source_id)
-                VALUES (?, ?, ?, ?, ?)""",
-                (name, description, status, source, source_id),
+                """INSERT INTO projects (name, description, status, source, source_id, tag)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (name, description, status, source, source_id, default_tag),
             )
             row = conn.execute(
                 "SELECT id FROM projects WHERE name = ?", (name,)
@@ -554,6 +576,14 @@ def rename_project(project_id: int, new_name: str) -> None:
 def delete_project(project_id: int) -> None:
     """Delete a project and all its entries."""
     with get_db() as conn:
+        tables = {
+            row["name"]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        if "project_activity" in tables:
+            conn.execute("DELETE FROM project_activity WHERE project_id = ?", (project_id,))
         conn.execute("DELETE FROM project_entries WHERE project_id = ?", (project_id,))
         conn.execute("DELETE FROM git_summaries WHERE project_id = ?", (project_id,))
         conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
@@ -567,6 +597,8 @@ def create_project(name: str, tag: str | None = None, description: str | None = 
         ).fetchone()
         if existing:
             raise ValueError(f"Project '{name}' already exists")
+        if tag is None:
+            tag = get_default_tag(name)
         cur = conn.execute(
             """INSERT INTO projects (name, tag, description, status)
                VALUES (?, ?, ?, 'active')""",
